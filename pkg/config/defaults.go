@@ -29,7 +29,6 @@ func DefaultConfig() *Config {
 		Version: CurrentVersion,
 		Agents: AgentsConfig{
 			Defaults: AgentDefaults{
-				LogLevel:                  "fatal",
 				Workspace:                 workspacePath,
 				RestrictToWorkspace:       true,
 				Provider:                  "",
@@ -375,6 +374,7 @@ func DefaultConfig() *Config {
 			Host:      "127.0.0.1",
 			Port:      18790,
 			HotReload: false,
+			LogLevel:  "fatal",
 		},
 		Tools: ToolsConfig{
 			MediaCleanup: MediaCleanupConfig{

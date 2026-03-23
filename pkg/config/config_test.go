@@ -461,8 +461,8 @@ func TestDefaultConfig_HooksDefaults(t *testing.T) {
 
 func TestDefaultConfig_LogLevel(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.Agents.Defaults.LogLevel != "fatal" {
-		t.Errorf("LogLevel = %q, want \"fatal\"", cfg.Agents.Defaults.LogLevel)
+	if cfg.Gateway.LogLevel != "fatal" {
+		t.Errorf("LogLevel = %q, want \"fatal\"", cfg.Gateway.LogLevel)
 	}
 }
 
@@ -1162,7 +1162,7 @@ func TestLoadConfig_UsesPassphraseProvider(t *testing.T) {
 func TestConfigParsesLogLevel(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")
-	data := `{"version":1,"agents":{"defaults":{"log_level":"debug"}}}`
+	data := `{"version":1,"gateway":{"log_level":"debug"}}`
 	if err := os.WriteFile(cfgPath, []byte(data), 0o600); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -1171,15 +1171,15 @@ func TestConfigParsesLogLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if cfg.Agents.Defaults.LogLevel != "debug" {
-		t.Errorf("LogLevel = %q, want \"debug\"", cfg.Agents.Defaults.LogLevel)
+	if cfg.Gateway.LogLevel != "debug" {
+		t.Errorf("LogLevel = %q, want \"debug\"", cfg.Gateway.LogLevel)
 	}
 }
 
 func TestConfigLogLevelEmpty(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")
-	data := `{}`
+	data := `{"version":1}`
 	if err := os.WriteFile(cfgPath, []byte(data), 0o600); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -1189,7 +1189,7 @@ func TestConfigLogLevelEmpty(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	// When config omits log_level, the DefaultConfig value ("fatal") is preserved.
-	if cfg.Agents.Defaults.LogLevel != "fatal" {
-		t.Errorf("LogLevel = %q, want \"fatal\"", cfg.Agents.Defaults.LogLevel)
+	if cfg.Gateway.LogLevel != "fatal" {
+		t.Errorf("LogLevel = %q, want \"fatal\"", cfg.Gateway.LogLevel)
 	}
 }
