@@ -17,10 +17,8 @@ type RouteInput struct {
 }
 
 // SessionPolicy describes how a routed message should be mapped to a session.
-// The current implementation preserves the legacy dm_scope and identity_link
-// semantics while moving session-key construction out of the router.
 type SessionPolicy struct {
-	DMScope       DMScope
+	Dimensions    []string
 	IdentityLinks map[string][]string
 }
 
@@ -246,14 +244,36 @@ func (r *RouteResolver) resolveDefaultAgentID() string {
 }
 
 func (r *RouteResolver) sessionPolicy() SessionPolicy {
-	dmScope := DMScope(r.cfg.Session.DMScope)
-	if dmScope == "" {
-		dmScope = DMScopeMain
-	}
 	return SessionPolicy{
-		DMScope:       dmScope,
+		Dimensions:    normalizeSessionDimensions(r.cfg.Session.Dimensions),
 		IdentityLinks: cloneIdentityLinks(r.cfg.Session.IdentityLinks),
 	}
+}
+
+func normalizeSessionDimensions(dimensions []string) []string {
+	if len(dimensions) == 0 {
+		return nil
+	}
+
+	normalized := make([]string, 0, len(dimensions))
+	seen := make(map[string]struct{}, len(dimensions))
+	for _, dimension := range dimensions {
+		dimension = strings.ToLower(strings.TrimSpace(dimension))
+		switch dimension {
+		case "space", "chat", "topic", "sender":
+		default:
+			continue
+		}
+		if _, ok := seen[dimension]; ok {
+			continue
+		}
+		seen[dimension] = struct{}{}
+		normalized = append(normalized, dimension)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }
 
 func cloneIdentityLinks(src map[string][]string) map[string][]string {

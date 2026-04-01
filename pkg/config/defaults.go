@@ -37,7 +37,7 @@ func DefaultConfig() *Config {
 		},
 		Bindings: []AgentBinding{},
 		Session: SessionConfig{
-			DMScope: "per-channel-peer",
+			Dimensions: []string{"chat"},
 		},
 		Channels: ChannelsConfig{
 			WhatsApp: WhatsAppConfig{

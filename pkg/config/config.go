@@ -109,9 +109,12 @@ func (c *Config) MarshalJSON() ([]byte, error) {
 		Alias: (*Alias)(c),
 	}
 
-	// Only include session if not empty
-	if c.Session.DMScope != "" || len(c.Session.IdentityLinks) > 0 {
-		aux.Session = &c.Session
+	// Only include session if not empty. Deprecated dm_scope is intentionally
+	// omitted so persisted configs converge on dimensions-based session policy.
+	if len(c.Session.Dimensions) > 0 || len(c.Session.IdentityLinks) > 0 {
+		sessionCfg := c.Session
+		sessionCfg.DMScope = ""
+		aux.Session = &sessionCfg
 	}
 
 	return json.Marshal(aux)
@@ -195,7 +198,8 @@ type AgentBinding struct {
 }
 
 type SessionConfig struct {
-	DMScope       string              `json:"dm_scope,omitempty"`
+	Dimensions    []string            `json:"dimensions,omitempty"`
+	DMScope       string              `json:"dm_scope,omitempty"` // Deprecated: ignored by the new session policy path.
 	IdentityLinks map[string][]string `json:"identity_links,omitempty"`
 }
 

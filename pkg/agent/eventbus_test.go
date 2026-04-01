@@ -149,7 +149,7 @@ func TestAgentLoop_EmitsMinimalTurnEvents(t *testing.T) {
 			Channel:   "cli",
 			AccountID: routing.DefaultAccountID,
 			SessionPolicy: routing.SessionPolicy{
-				DMScope: routing.DMScopePerPeer,
+				Dimensions: []string{"sender"},
 			},
 			MatchedBy: "default",
 		},

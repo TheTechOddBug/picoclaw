@@ -181,7 +181,7 @@ func TestJSONLBackend_SummarizeFlow(t *testing.T) {
 func TestJSONLBackend_ResolveAliasAndPersistMetadata(t *testing.T) {
 	b := newBackend(t)
 
-	b.EnsureSessionMetadata("canonical", &session.SessionScope{
+	scope := &session.SessionScope{
 		Version:    session.ScopeVersionV1,
 		AgentID:    "main",
 		Channel:    "telegram",
@@ -190,7 +190,8 @@ func TestJSONLBackend_ResolveAliasAndPersistMetadata(t *testing.T) {
 		Values: map[string]string{
 			"chat": "group:c1",
 		},
-	}, []string{"legacy"})
+	}
+	b.EnsureSessionMetadata("canonical", scope, []string{"legacy"})
 
 	if got := b.ResolveSessionKey("legacy"); got != "canonical" {
 		t.Fatalf("ResolveSessionKey() = %q, want %q", got, "canonical")
@@ -203,5 +204,38 @@ func TestJSONLBackend_ResolveAliasAndPersistMetadata(t *testing.T) {
 	}
 	if history[0].Content != "hello through alias" {
 		t.Fatalf("history[0].Content = %q, want %q", history[0].Content, "hello through alias")
+	}
+
+	resolvedScope := b.GetSessionScope("legacy")
+	if resolvedScope == nil {
+		t.Fatal("GetSessionScope() returned nil")
+	}
+	if resolvedScope.AgentID != scope.AgentID || resolvedScope.Values["chat"] != scope.Values["chat"] {
+		t.Fatalf("GetSessionScope() = %+v, want %+v", resolvedScope, scope)
+	}
+}
+
+func TestJSONLBackend_EnsureSessionMetadata_PromotesLegacyAliasHistory(t *testing.T) {
+	b := newBackend(t)
+
+	legacyKey := "agent:main:direct:legacy-user"
+	b.AddMessage(legacyKey, "user", "legacy history")
+	b.SetSummary(legacyKey, "legacy summary")
+
+	canonicalKey := session.BuildOpaqueSessionKey(legacyKey)
+	b.EnsureSessionMetadata(canonicalKey, &session.SessionScope{
+		Version: session.ScopeVersionV1,
+		AgentID: "main",
+	}, []string{legacyKey})
+
+	if got := b.ResolveSessionKey(legacyKey); got != canonicalKey {
+		t.Fatalf("ResolveSessionKey() = %q, want %q", got, canonicalKey)
+	}
+	history := b.GetHistory(canonicalKey)
+	if len(history) != 1 || history[0].Content != "legacy history" {
+		t.Fatalf("promoted history = %+v", history)
+	}
+	if summary := b.GetSummary(canonicalKey); summary != "legacy summary" {
+		t.Fatalf("promoted summary = %q, want %q", summary, "legacy summary")
 	}
 }

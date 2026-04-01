@@ -230,9 +230,6 @@ func (s *JSONLStore) ResolveSessionKey(_ context.Context, sessionKey string) (st
 	if sessionKey == "" {
 		return "", false, nil
 	}
-	if s.sessionExists(sessionKey) {
-		return sessionKey, true, nil
-	}
 
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
@@ -254,14 +251,32 @@ func (s *JSONLStore) ResolveSessionKey(_ context.Context, sessionKey string) (st
 		if meta.Key == "" {
 			continue
 		}
-		if meta.Key == sessionKey {
-			return meta.Key, true, nil
-		}
 		for _, alias := range meta.Aliases {
-			if alias == sessionKey {
+			if alias == sessionKey && meta.Key != sessionKey {
 				return meta.Key, true, nil
 			}
 		}
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".meta.json") {
+			continue
+		}
+		data, readErr := os.ReadFile(filepath.Join(s.dir, entry.Name()))
+		if readErr != nil {
+			return "", false, fmt.Errorf("memory: read meta: %w", readErr)
+		}
+		var meta SessionMeta
+		if err := json.Unmarshal(data, &meta); err != nil {
+			return "", false, fmt.Errorf("memory: decode meta: %w", err)
+		}
+		if meta.Key == sessionKey {
+			return meta.Key, true, nil
+		}
+	}
+
+	if s.sessionExists(sessionKey) {
+		return sessionKey, true, nil
 	}
 
 	return "", false, nil

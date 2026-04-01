@@ -108,6 +108,7 @@ const (
 	toolLimitResponse          = "I've reached `max_tool_iterations` without a final response. Increase `max_tool_iterations` in config.json if this task needs more tool steps."
 	handledToolResponseSummary = "Requested output delivered via tool attachment."
 	sessionKeyAgentPrefix      = "agent:"
+	sessionKeyOpaquePrefix     = "sk_"
 	metadataKeyAccountID       = "account_id"
 	metadataKeyGuildID         = "guild_id"
 	metadataKeyTeamID          = "team_id"
@@ -1022,8 +1023,8 @@ func appendEventContextFields(fields map[string]any, turnCtx *TurnContext) {
 		if route.MatchedBy != "" {
 			fields["route_matched_by"] = route.MatchedBy
 		}
-		if route.SessionPolicy.DMScope != "" {
-			fields["route_dm_scope"] = string(route.SessionPolicy.DMScope)
+		if len(route.SessionPolicy.Dimensions) > 0 {
+			fields["route_dimensions"] = strings.Join(route.SessionPolicy.Dimensions, ",")
 		}
 		if count := len(route.SessionPolicy.IdentityLinks); count > 0 {
 			fields["route_identity_link_count"] = count
@@ -1476,7 +1477,7 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 
 	opts := processOptions{
 		SessionKey:        sessionKey,
-		SessionAliases:    buildSessionAliases(sessionKey, allocation.SessionKey, msg.SessionKey),
+		SessionAliases:    buildSessionAliases(sessionKey, append(allocation.SessionAliases, msg.SessionKey)...),
 		Channel:           msg.Channel,
 		ChatID:            msg.ChatID,
 		MessageID:         msg.MessageID,
@@ -1543,10 +1544,15 @@ func normalizedInboundContext(msg bus.InboundMessage) bus.InboundContext {
 }
 
 func resolveScopeKey(routeSessionKey, msgSessionKey string) string {
-	if msgSessionKey != "" && strings.HasPrefix(msgSessionKey, sessionKeyAgentPrefix) {
+	if isExplicitSessionKey(msgSessionKey) {
 		return msgSessionKey
 	}
 	return routeSessionKey
+}
+
+func isExplicitSessionKey(sessionKey string) bool {
+	sessionKey = strings.TrimSpace(strings.ToLower(sessionKey))
+	return strings.HasPrefix(sessionKey, sessionKeyAgentPrefix) || strings.HasPrefix(sessionKey, sessionKeyOpaquePrefix)
 }
 
 func buildSessionAliases(canonicalKey string, keys ...string) []string {
@@ -1589,9 +1595,7 @@ func ensureSessionMetadata(store session.SessionStore, key string, scope *sessio
 func (al *AgentLoop) allocateRouteSession(route routing.ResolvedRoute, msg bus.InboundMessage) session.Allocation {
 	return session.AllocateRouteSession(session.AllocationInput{
 		AgentID:       route.AgentID,
-		Channel:       route.Channel,
-		AccountID:     route.AccountID,
-		Peer:          extractPeer(msg),
+		Context:       normalizedInboundContext(msg),
 		SessionPolicy: route.SessionPolicy,
 	})
 }

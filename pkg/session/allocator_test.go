@@ -3,28 +3,36 @@ package session
 import (
 	"testing"
 
+	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/routing"
 )
 
 func TestAllocateRouteSession_PerPeerDM(t *testing.T) {
 	allocation := AllocateRouteSession(AllocationInput{
-		AgentID:   "main",
-		Channel:   "telegram",
-		AccountID: "default",
-		Peer: &routing.RoutePeer{
-			Kind: "direct",
-			ID:   "User123",
+		AgentID: "main",
+		Context: bus.InboundContext{
+			Channel:  "telegram",
+			Account:  "default",
+			ChatID:   "dm-123",
+			ChatType: "direct",
+			SenderID: "User123",
 		},
 		SessionPolicy: routing.SessionPolicy{
-			DMScope: routing.DMScopePerPeer,
+			Dimensions: []string{"sender"},
 		},
 	})
 
-	if allocation.SessionKey != "agent:main:direct:user123" {
-		t.Fatalf("SessionKey = %q, want %q", allocation.SessionKey, "agent:main:direct:user123")
+	if allocation.SessionKey == "" || !IsOpaqueSessionKey(allocation.SessionKey) {
+		t.Fatalf("SessionKey = %q, want opaque session key", allocation.SessionKey)
 	}
-	if allocation.MainSessionKey != "agent:main:main" {
-		t.Fatalf("MainSessionKey = %q, want %q", allocation.MainSessionKey, "agent:main:main")
+	if !containsAlias(allocation.SessionAliases, "agent:main:direct:user123") {
+		t.Fatalf("SessionAliases = %v, want to contain agent:main:direct:user123", allocation.SessionAliases)
+	}
+	if allocation.MainSessionKey == "" || !IsOpaqueSessionKey(allocation.MainSessionKey) {
+		t.Fatalf("MainSessionKey = %q, want opaque session key", allocation.MainSessionKey)
+	}
+	if len(allocation.MainAliases) != 1 || allocation.MainAliases[0] != "agent:main:main" {
+		t.Fatalf("MainAliases = %v, want [agent:main:main]", allocation.MainAliases)
 	}
 	if allocation.Scope.Version != ScopeVersionV1 {
 		t.Fatalf("Scope.Version = %d, want %d", allocation.Scope.Version, ScopeVersionV1)
@@ -39,23 +47,30 @@ func TestAllocateRouteSession_PerPeerDM(t *testing.T) {
 
 func TestAllocateRouteSession_GroupPeer(t *testing.T) {
 	allocation := AllocateRouteSession(AllocationInput{
-		AgentID:   "main",
-		Channel:   "slack",
-		AccountID: "workspace-a",
-		Peer: &routing.RoutePeer{
-			Kind: "channel",
-			ID:   "C001",
+		AgentID: "main",
+		Context: bus.InboundContext{
+			Channel:  "slack",
+			Account:  "workspace-a",
+			ChatID:   "C001",
+			ChatType: "channel",
+			SenderID: "U001",
 		},
 		SessionPolicy: routing.SessionPolicy{
-			DMScope: routing.DMScopePerAccountChannelPeer,
+			Dimensions: []string{"chat"},
 		},
 	})
 
-	if allocation.SessionKey != "agent:main:slack:channel:c001" {
-		t.Fatalf("SessionKey = %q, want %q", allocation.SessionKey, "agent:main:slack:channel:c001")
+	if allocation.SessionKey == "" || !IsOpaqueSessionKey(allocation.SessionKey) {
+		t.Fatalf("SessionKey = %q, want opaque session key", allocation.SessionKey)
 	}
-	if allocation.MainSessionKey != "agent:main:main" {
-		t.Fatalf("MainSessionKey = %q, want %q", allocation.MainSessionKey, "agent:main:main")
+	if !containsAlias(allocation.SessionAliases, "agent:main:slack:channel:c001") {
+		t.Fatalf("SessionAliases = %v, want to contain agent:main:slack:channel:c001", allocation.SessionAliases)
+	}
+	if allocation.MainSessionKey == "" || !IsOpaqueSessionKey(allocation.MainSessionKey) {
+		t.Fatalf("MainSessionKey = %q, want opaque session key", allocation.MainSessionKey)
+	}
+	if len(allocation.MainAliases) != 1 || allocation.MainAliases[0] != "agent:main:main" {
+		t.Fatalf("MainAliases = %v, want [agent:main:main]", allocation.MainAliases)
 	}
 	if len(allocation.Scope.Dimensions) != 1 || allocation.Scope.Dimensions[0] != "chat" {
 		t.Fatalf("Scope.Dimensions = %v, want [chat]", allocation.Scope.Dimensions)
@@ -63,4 +78,24 @@ func TestAllocateRouteSession_GroupPeer(t *testing.T) {
 	if allocation.Scope.Values["chat"] != "channel:c001" {
 		t.Fatalf("Scope.Values[chat] = %q, want channel:c001", allocation.Scope.Values["chat"])
 	}
+}
+
+func TestBuildOpaqueSessionKey_IsStable(t *testing.T) {
+	first := BuildOpaqueSessionKey("agent:main:direct:user123")
+	second := BuildOpaqueSessionKey("agent:main:direct:user123")
+	if first != second {
+		t.Fatalf("BuildOpaqueSessionKey() mismatch: %q != %q", first, second)
+	}
+	if !IsOpaqueSessionKey(first) {
+		t.Fatalf("expected opaque session key, got %q", first)
+	}
+}
+
+func containsAlias(aliases []string, want string) bool {
+	for _, alias := range aliases {
+		if alias == want {
+			return true
+		}
+	}
+	return false
 }

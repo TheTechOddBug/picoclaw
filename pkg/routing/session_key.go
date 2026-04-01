@@ -112,6 +112,19 @@ func CanonicalSessionPeerID(
 	return strings.ToLower(normalizedPeerID)
 }
 
+// CanonicalSessionIdentityID collapses an identity using identity_links when
+// possible, then returns a normalized lowercase identifier.
+func CanonicalSessionIdentityID(channel, rawID string, identityLinks map[string][]string) string {
+	normalizedID := strings.TrimSpace(rawID)
+	if normalizedID == "" {
+		return ""
+	}
+	if linked := resolveLinkedPeerID(identityLinks, channel, normalizedID); linked != "" {
+		normalizedID = linked
+	}
+	return strings.ToLower(normalizedID)
+}
+
 // ParseAgentSessionKey extracts agentId and rest from "agent:<agentId>:<rest>".
 func ParseAgentSessionKey(sessionKey string) *ParsedSessionKey {
 	raw := strings.TrimSpace(sessionKey)

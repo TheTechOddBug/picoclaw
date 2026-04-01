@@ -9,6 +9,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/routing"
+	"github.com/sipeed/picoclaw/pkg/session"
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
 
@@ -308,6 +309,27 @@ func (al *AgentLoop) agentForSession(sessionKey string) *AgentInstance {
 	registry := al.GetRegistry()
 	if registry == nil {
 		return nil
+	}
+
+	for _, agentID := range registry.ListAgentIDs() {
+		agent, ok := registry.GetAgent(agentID)
+		if !ok || agent == nil {
+			continue
+		}
+		scopeReader, ok := agent.Sessions.(interface {
+			GetSessionScope(sessionKey string) *session.SessionScope
+		})
+		if !ok {
+			continue
+		}
+		scope := scopeReader.GetSessionScope(sessionKey)
+		if scope == nil || strings.TrimSpace(scope.AgentID) == "" {
+			continue
+		}
+		if scopedAgent, ok := registry.GetAgent(scope.AgentID); ok {
+			return scopedAgent
+		}
+		return agent
 	}
 
 	if parsed := routing.ParseAgentSessionKey(sessionKey); parsed != nil {

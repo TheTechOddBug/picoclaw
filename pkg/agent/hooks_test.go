@@ -172,7 +172,7 @@ func TestAgentLoop_Hooks_ObserverAndLLMInterceptor(t *testing.T) {
 			Channel:   "cli",
 			AccountID: routing.DefaultAccountID,
 			SessionPolicy: routing.SessionPolicy{
-				DMScope: routing.DMScopePerPeer,
+				Dimensions: []string{"sender"},
 			},
 			MatchedBy: "default",
 		},

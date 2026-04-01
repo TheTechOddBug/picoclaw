@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/routing"
 )
 
@@ -13,85 +14,167 @@ import (
 type Allocation struct {
 	Scope          SessionScope
 	SessionKey     string
+	SessionAliases []string
 	MainSessionKey string
+	MainAliases    []string
 }
 
 // AllocationInput contains the routing result and peer context needed to
 // derive the session keys for a turn.
 type AllocationInput struct {
 	AgentID       string
-	Channel       string
-	AccountID     string
-	Peer          *routing.RoutePeer
+	Context       bus.InboundContext
 	SessionPolicy routing.SessionPolicy
 }
 
-// AllocateRouteSession maps a route decision onto the current legacy
-// agent-scoped session-key format.
+// AllocateRouteSession maps a route decision onto a structured scope and the
+// current opaque session-key format.
 func AllocateRouteSession(input AllocationInput) Allocation {
 	scope := buildSessionScope(input)
-	sessionKey := strings.ToLower(routing.BuildAgentPeerSessionKey(routing.SessionKeyParams{
-		AgentID:       input.AgentID,
-		Channel:       input.Channel,
-		AccountID:     input.AccountID,
-		Peer:          input.Peer,
-		DMScope:       input.SessionPolicy.DMScope,
-		IdentityLinks: input.SessionPolicy.IdentityLinks,
-	}))
-	mainSessionKey := strings.ToLower(routing.BuildAgentMainSessionKey(input.AgentID))
+	legacySessionAliases := buildLegacySessionAliases(input)
+	legacyMainSessionKey := strings.ToLower(routing.BuildAgentMainSessionKey(input.AgentID))
 	return Allocation{
 		Scope:          scope,
-		SessionKey:     sessionKey,
-		MainSessionKey: mainSessionKey,
+		SessionKey:     BuildSessionKey(scope),
+		SessionAliases: legacySessionAliases,
+		MainSessionKey: BuildOpaqueSessionKey(legacyMainSessionKey),
+		MainAliases:    []string{legacyMainSessionKey},
 	}
 }
 
 func buildSessionScope(input AllocationInput) SessionScope {
+	inbound := input.Context
 	scope := SessionScope{
 		Version: ScopeVersionV1,
 		AgentID: routing.NormalizeAgentID(input.AgentID),
-		Channel: strings.ToLower(strings.TrimSpace(input.Channel)),
-		Account: routing.NormalizeAccountID(input.AccountID),
+		Channel: strings.ToLower(strings.TrimSpace(inbound.Channel)),
+		Account: routing.NormalizeAccountID(inbound.Account),
+	}
+	if scope.Channel == "" {
+		scope.Channel = "unknown"
 	}
 
-	peer := input.Peer
-	if peer == nil {
-		peer = &routing.RoutePeer{Kind: "direct"}
+	dimensions := make([]string, 0, len(input.SessionPolicy.Dimensions))
+	values := make(map[string]string, len(input.SessionPolicy.Dimensions))
+
+	for _, dimension := range input.SessionPolicy.Dimensions {
+		switch dimension {
+		case "space":
+			if spaceID := strings.TrimSpace(inbound.SpaceID); spaceID != "" {
+				spaceType := strings.ToLower(strings.TrimSpace(inbound.SpaceType))
+				if spaceType == "" {
+					spaceType = "space"
+				}
+				dimensions = append(dimensions, "space")
+				values["space"] = fmt.Sprintf("%s:%s", spaceType, strings.ToLower(spaceID))
+			}
+		case "chat":
+			chatID := strings.TrimSpace(inbound.ChatID)
+			if chatID == "" {
+				continue
+			}
+			chatType := strings.ToLower(strings.TrimSpace(inbound.ChatType))
+			if chatType == "" {
+				chatType = "direct"
+			}
+			dimensions = append(dimensions, "chat")
+			values["chat"] = fmt.Sprintf("%s:%s", chatType, strings.ToLower(chatID))
+		case "topic":
+			if topicID := strings.TrimSpace(inbound.TopicID); topicID != "" {
+				dimensions = append(dimensions, "topic")
+				values["topic"] = "topic:" + strings.ToLower(topicID)
+			}
+		case "sender":
+			senderID := routing.CanonicalSessionIdentityID(
+				inbound.Channel,
+				inbound.SenderID,
+				input.SessionPolicy.IdentityLinks,
+			)
+			if senderID == "" {
+				continue
+			}
+			dimensions = append(dimensions, "sender")
+			values["sender"] = senderID
+		}
 	}
 
-	peerKind := strings.ToLower(strings.TrimSpace(peer.Kind))
-	if peerKind == "" {
-		peerKind = "direct"
-	}
-
-	switch peerKind {
-	case "direct":
-		if input.SessionPolicy.DMScope == routing.DMScopeMain {
-			return scope
-		}
-		peerID := routing.CanonicalSessionPeerID(
-			input.Channel,
-			peer.ID,
-			input.SessionPolicy.DMScope,
-			input.SessionPolicy.IdentityLinks,
-		)
-		if peerID == "" {
-			return scope
-		}
-		scope.Dimensions = []string{"sender"}
-		scope.Values = map[string]string{
-			"sender": peerID,
-		}
-	default:
-		peerID := strings.ToLower(strings.TrimSpace(peer.ID))
-		if peerID == "" {
-			peerID = "unknown"
-		}
-		scope.Dimensions = []string{"chat"}
-		scope.Values = map[string]string{
-			"chat": fmt.Sprintf("%s:%s", peerKind, peerID),
-		}
+	if len(dimensions) > 0 {
+		scope.Dimensions = dimensions
+		scope.Values = values
 	}
 
 	return scope
+}
+
+func buildLegacySessionAliases(input AllocationInput) []string {
+	aliases := []string{strings.ToLower(routing.BuildAgentMainSessionKey(input.AgentID))}
+	inbound := input.Context
+
+	if strings.EqualFold(strings.TrimSpace(inbound.ChatType), "direct") {
+		senderID := routing.CanonicalSessionIdentityID(
+			inbound.Channel,
+			inbound.SenderID,
+			input.SessionPolicy.IdentityLinks,
+		)
+		if senderID == "" {
+			return uniqueAliases(aliases)
+		}
+		for _, dmScope := range []routing.DMScope{
+			routing.DMScopePerPeer,
+			routing.DMScopePerChannelPeer,
+			routing.DMScopePerAccountChannelPeer,
+		} {
+			aliases = append(aliases, strings.ToLower(routing.BuildAgentPeerSessionKey(routing.SessionKeyParams{
+				AgentID:       input.AgentID,
+				Channel:       inbound.Channel,
+				AccountID:     inbound.Account,
+				Peer:          &routing.RoutePeer{Kind: "direct", ID: senderID},
+				DMScope:       dmScope,
+				IdentityLinks: input.SessionPolicy.IdentityLinks,
+			})))
+		}
+		return uniqueAliases(aliases)
+	}
+
+	peerID := strings.TrimSpace(inbound.ChatID)
+	if peerID == "" {
+		return uniqueAliases(aliases)
+	}
+	if topicID := strings.TrimSpace(inbound.TopicID); topicID != "" {
+		peerID = peerID + "/" + topicID
+	}
+	aliases = append(aliases, strings.ToLower(routing.BuildAgentPeerSessionKey(routing.SessionKeyParams{
+		AgentID:   input.AgentID,
+		Channel:   inbound.Channel,
+		AccountID: inbound.Account,
+		Peer: &routing.RoutePeer{
+			Kind: strings.ToLower(strings.TrimSpace(inbound.ChatType)),
+			ID:   peerID,
+		},
+	})))
+
+	return uniqueAliases(aliases)
+}
+
+func uniqueAliases(aliases []string) []string {
+	if len(aliases) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(aliases))
+	seen := make(map[string]struct{}, len(aliases))
+	for _, alias := range aliases {
+		alias = strings.TrimSpace(strings.ToLower(alias))
+		if alias == "" {
+			continue
+		}
+		if _, ok := seen[alias]; ok {
+			continue
+		}
+		seen[alias] = struct{}{}
+		normalized = append(normalized, alias)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }

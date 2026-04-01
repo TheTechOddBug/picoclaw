@@ -72,7 +72,7 @@ func cloneResolvedRoute(route *routing.ResolvedRoute) *routing.ResolvedRoute {
 	}
 	cloned := *route
 	cloned.SessionPolicy = routing.SessionPolicy{
-		DMScope:       route.SessionPolicy.DMScope,
+		Dimensions:    append([]string(nil), route.SessionPolicy.Dimensions...),
 		IdentityLinks: cloneIdentityLinks(route.SessionPolicy.IdentityLinks),
 	}
 	return &cloned

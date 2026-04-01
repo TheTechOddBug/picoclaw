@@ -796,7 +796,7 @@ func TestAppendEventContextFields_IncludesInboundRouteAndScope(t *testing.T) {
 			AccountID: "workspace-a",
 			MatchedBy: "binding.team",
 			SessionPolicy: routing.SessionPolicy{
-				DMScope: routing.DMScopePerChannelPeer,
+				Dimensions: []string{"chat", "sender"},
 				IdentityLinks: map[string][]string{
 					"canonical-user": {"slack:U123"},
 				},
@@ -824,8 +824,8 @@ func TestAppendEventContextFields_IncludesInboundRouteAndScope(t *testing.T) {
 	if fields["route_matched_by"] != "binding.team" {
 		t.Fatalf("route_matched_by = %v, want binding.team", fields["route_matched_by"])
 	}
-	if fields["route_dm_scope"] != string(routing.DMScopePerChannelPeer) {
-		t.Fatalf("route_dm_scope = %v, want %q", fields["route_dm_scope"], routing.DMScopePerChannelPeer)
+	if fields["route_dimensions"] != "chat,sender" {
+		t.Fatalf("route_dimensions = %v, want chat,sender", fields["route_dimensions"])
 	}
 	if fields["route_identity_link_count"] != 1 {
 		t.Fatalf("route_identity_link_count = %v, want 1", fields["route_identity_link_count"])
@@ -865,7 +865,7 @@ func TestResolveMessageRoute_UsesInboundContextAccountAndSpace(t *testing.T) {
 			},
 		},
 		Session: config.SessionConfig{
-			DMScope: "per-peer",
+			Dimensions: []string{"sender"},
 		},
 	}
 
@@ -1600,7 +1600,7 @@ func TestProcessMessage_CommandOutcomes(t *testing.T) {
 			},
 		},
 		Session: config.SessionConfig{
-			DMScope: "per-channel-peer",
+			Dimensions: []string{"chat"},
 		},
 	}
 

@@ -137,7 +137,7 @@ func TestAgentConfig_FullParse(t *testing.T) {
 			}
 		],
 		"session": {
-			"dm_scope": "per-peer",
+			"dimensions": ["sender"],
 			"identity_links": {
 				"john": ["telegram:123", "discord:john#1234"]
 			}
@@ -186,8 +186,8 @@ func TestAgentConfig_FullParse(t *testing.T) {
 		t.Errorf("binding.Match.Peer = %+v", binding.Match.Peer)
 	}
 
-	if cfg.Session.DMScope != "per-peer" {
-		t.Errorf("Session.DMScope = %q", cfg.Session.DMScope)
+	if len(cfg.Session.Dimensions) != 1 || cfg.Session.Dimensions[0] != "sender" {
+		t.Errorf("Session.Dimensions = %v", cfg.Session.Dimensions)
 	}
 	if len(cfg.Session.IdentityLinks) != 1 {
 		t.Errorf("Session.IdentityLinks = %v", cfg.Session.IdentityLinks)
@@ -758,7 +758,7 @@ func TestLoadConfig_HooksProcessConfig(t *testing.T) {
 	}
 }
 
-// TestDefaultConfig_DMScope verifies the default dm_scope value
+// TestDefaultConfig_SessionDimensions verifies the default session dimensions
 // TestDefaultConfig_SummarizationThresholds verifies summarization defaults
 func TestDefaultConfig_SummarizationThresholds(t *testing.T) {
 	cfg := DefaultConfig()
@@ -771,11 +771,11 @@ func TestDefaultConfig_SummarizationThresholds(t *testing.T) {
 	}
 }
 
-func TestDefaultConfig_DMScope(t *testing.T) {
+func TestDefaultConfig_SessionDimensions(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.Session.DMScope != "per-channel-peer" {
-		t.Errorf("Session.DMScope = %q, want 'per-channel-peer'", cfg.Session.DMScope)
+	if len(cfg.Session.Dimensions) != 1 || cfg.Session.Dimensions[0] != "chat" {
+		t.Errorf("Session.Dimensions = %v, want [chat]", cfg.Session.Dimensions)
 	}
 }
 

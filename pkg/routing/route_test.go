@@ -17,7 +17,7 @@ func testConfig(agents []config.AgentConfig, bindings []config.AgentBinding) *co
 		},
 		Bindings: bindings,
 		Session: config.SessionConfig{
-			DMScope: "per-peer",
+			Dimensions: []string{"sender"},
 		},
 	}
 }
@@ -37,8 +37,8 @@ func TestResolveRoute_DefaultAgent_NoBindings(t *testing.T) {
 	if route.MatchedBy != "default" {
 		t.Errorf("MatchedBy = %q, want 'default'", route.MatchedBy)
 	}
-	if route.SessionPolicy.DMScope != DMScopePerPeer {
-		t.Errorf("SessionPolicy.DMScope = %q, want %q", route.SessionPolicy.DMScope, DMScopePerPeer)
+	if len(route.SessionPolicy.Dimensions) != 1 || route.SessionPolicy.Dimensions[0] != "sender" {
+		t.Errorf("SessionPolicy.Dimensions = %v, want [sender]", route.SessionPolicy.Dimensions)
 	}
 	if route.SessionPolicy.IdentityLinks != nil {
 		t.Errorf("SessionPolicy.IdentityLinks = %v, want nil", route.SessionPolicy.IdentityLinks)

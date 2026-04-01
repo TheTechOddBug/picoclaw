@@ -296,6 +296,32 @@ func TestResolveSessionKeyByAlias(t *testing.T) {
 	}
 }
 
+func TestResolveSessionKeyByAlias_PrefersMetadataOverLegacyFile(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	if err := store.AddMessage(ctx, "legacy:key", "user", "legacy"); err != nil {
+		t.Fatalf("AddMessage(legacy) error = %v", err)
+	}
+	if err := store.AddMessage(ctx, "canonical", "user", "canonical"); err != nil {
+		t.Fatalf("AddMessage(canonical) error = %v", err)
+	}
+	if err := store.UpsertSessionMeta(ctx, "canonical", nil, []string{"legacy:key"}); err != nil {
+		t.Fatalf("UpsertSessionMeta() error = %v", err)
+	}
+
+	resolved, found, err := store.ResolveSessionKey(ctx, "legacy:key")
+	if err != nil {
+		t.Fatalf("ResolveSessionKey() error = %v", err)
+	}
+	if !found {
+		t.Fatal("ResolveSessionKey() did not find alias")
+	}
+	if resolved != "canonical" {
+		t.Fatalf("resolved = %q, want %q", resolved, "canonical")
+	}
+}
+
 func TestTruncateHistory_KeepLast(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strings"
 
 	"github.com/sipeed/picoclaw/pkg/memory"
 	"github.com/sipeed/picoclaw/pkg/providers"
@@ -26,6 +27,7 @@ type metaAwareStore interface {
 type MetadataAwareSessionStore interface {
 	EnsureSessionMetadata(sessionKey string, scope *SessionScope, aliases []string)
 	ResolveSessionKey(sessionKey string) string
+	GetSessionScope(sessionKey string) *SessionScope
 }
 
 // NewJSONLBackend wraps a memory.Store for use as a SessionStore.
@@ -62,6 +64,11 @@ func (b *JSONLBackend) EnsureSessionMetadata(sessionKey string, scope *SessionSc
 	if !ok {
 		return
 	}
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return
+	}
+
 	var rawScope json.RawMessage
 	if scope != nil {
 		data, err := json.Marshal(scope)
@@ -71,9 +78,81 @@ func (b *JSONLBackend) EnsureSessionMetadata(sessionKey string, scope *SessionSc
 		}
 		rawScope = data
 	}
-	if err := metaStore.UpsertSessionMeta(context.Background(), sessionKey, rawScope, aliases); err != nil {
+	ctx := context.Background()
+	if err := metaStore.UpsertSessionMeta(ctx, sessionKey, rawScope, aliases); err != nil {
 		log.Printf("session: upsert session metadata: %v", err)
+		return
 	}
+
+	canonicalHistory, historyErr := b.store.GetHistory(ctx, sessionKey)
+	if historyErr != nil {
+		log.Printf("session: get canonical history: %v", historyErr)
+		return
+	}
+	canonicalSummary, summaryErr := b.store.GetSummary(ctx, sessionKey)
+	if summaryErr != nil {
+		log.Printf("session: get canonical summary: %v", summaryErr)
+		return
+	}
+	if len(canonicalHistory) > 0 || strings.TrimSpace(canonicalSummary) != "" {
+		return
+	}
+
+	for _, alias := range aliases {
+		alias = strings.TrimSpace(alias)
+		if alias == "" || alias == sessionKey {
+			continue
+		}
+		aliasHistory, err := b.store.GetHistory(ctx, alias)
+		if err != nil {
+			log.Printf("session: get alias history: %v", err)
+			continue
+		}
+		aliasSummary, err := b.store.GetSummary(ctx, alias)
+		if err != nil {
+			log.Printf("session: get alias summary: %v", err)
+			continue
+		}
+		if len(aliasHistory) == 0 && strings.TrimSpace(aliasSummary) == "" {
+			continue
+		}
+		if err := b.store.SetHistory(ctx, sessionKey, aliasHistory); err != nil {
+			log.Printf("session: promote alias history: %v", err)
+			return
+		}
+		if strings.TrimSpace(aliasSummary) != "" {
+			if err := b.store.SetSummary(ctx, sessionKey, aliasSummary); err != nil {
+				log.Printf("session: promote alias summary: %v", err)
+			}
+		}
+		if err := metaStore.UpsertSessionMeta(ctx, sessionKey, rawScope, aliases); err != nil {
+			log.Printf("session: refresh session metadata after promotion: %v", err)
+		}
+		return
+	}
+}
+
+// GetSessionScope reads structured scope metadata for a session key or alias.
+func (b *JSONLBackend) GetSessionScope(sessionKey string) *SessionScope {
+	metaStore, ok := b.store.(metaAwareStore)
+	if !ok {
+		return nil
+	}
+	sessionKey = b.resolveSessionKey(sessionKey)
+	meta, err := metaStore.GetSessionMeta(context.Background(), sessionKey)
+	if err != nil {
+		log.Printf("session: get session metadata: %v", err)
+		return nil
+	}
+	if len(meta.Scope) == 0 {
+		return nil
+	}
+	var scope SessionScope
+	if err := json.Unmarshal(meta.Scope, &scope); err != nil {
+		log.Printf("session: decode session scope: %v", err)
+		return nil
+	}
+	return CloneScope(&scope)
 }
 
 func (b *JSONLBackend) AddMessage(sessionKey, role, content string) {
