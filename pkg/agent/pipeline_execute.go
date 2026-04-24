@@ -260,7 +260,7 @@ toolLoop:
 						case result, ok := <-ts.pendingResults:
 							if ok && result != nil && result.ForLLM != "" {
 								content := al.cfg.FilterSensitiveData(result.ForLLM)
-								msg := providers.Message{Role: "user", Content: fmt.Sprintf("[SubTurn Result] %s", content)}
+								msg := subTurnResultPromptMessage(content)
 								messages = append(messages, msg)
 								ts.agent.Sessions.AddFullMessage(ts.sessionKey, msg)
 							}
@@ -631,7 +631,7 @@ toolLoop:
 			case result, ok := <-ts.pendingResults:
 				if ok && result != nil && result.ForLLM != "" {
 					content := al.cfg.FilterSensitiveData(result.ForLLM)
-					msg := providers.Message{Role: "user", Content: fmt.Sprintf("[SubTurn Result] %s", content)}
+					msg := subTurnResultPromptMessage(content)
 					messages = append(messages, msg)
 					ts.agent.Sessions.AddFullMessage(ts.sessionKey, msg)
 				}

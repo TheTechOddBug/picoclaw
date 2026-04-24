@@ -149,6 +149,101 @@ func (h *llmObserverHook) AfterLLM(
 	return next, HookDecision{Action: HookActionModify}, nil
 }
 
+type llmSystemRewriteHook struct{}
+
+func (h *llmSystemRewriteHook) BeforeLLM(
+	ctx context.Context,
+	req *LLMHookRequest,
+) (*LLMHookRequest, HookDecision, error) {
+	next := req.Clone()
+	next.Model = "changed-model"
+	next.Messages[0].Content = "rewritten system"
+	return next, HookDecision{Action: HookActionModify}, nil
+}
+
+func (h *llmSystemRewriteHook) AfterLLM(
+	ctx context.Context,
+	resp *LLMHookResponse,
+) (*LLMHookResponse, HookDecision, error) {
+	return resp.Clone(), HookDecision{Action: HookActionContinue}, nil
+}
+
+type llmUserAppendHook struct{}
+
+func (h *llmUserAppendHook) BeforeLLM(
+	ctx context.Context,
+	req *LLMHookRequest,
+) (*LLMHookRequest, HookDecision, error) {
+	next := req.Clone()
+	next.Messages = append(next.Messages, providers.Message{Role: "user", Content: "extra user context"})
+	return next, HookDecision{Action: HookActionModify}, nil
+}
+
+func (h *llmUserAppendHook) AfterLLM(
+	ctx context.Context,
+	resp *LLMHookResponse,
+) (*LLMHookResponse, HookDecision, error) {
+	return resp.Clone(), HookDecision{Action: HookActionContinue}, nil
+}
+
+func TestHookManager_BeforeLLMControlsSystemPromptMutation(t *testing.T) {
+	hm := NewHookManager(nil)
+	if err := hm.Mount(NamedHook("rewrite-system", &llmSystemRewriteHook{})); err != nil {
+		t.Fatalf("Mount() error = %v", err)
+	}
+
+	req := &LLMHookRequest{
+		Model: "original-model",
+		Messages: []providers.Message{
+			{
+				Role:    "system",
+				Content: "original system",
+				SystemParts: []providers.ContentBlock{
+					{Type: "text", Text: "original system"},
+				},
+			},
+			{Role: "user", Content: "hello"},
+		},
+	}
+
+	got, decision := hm.BeforeLLM(context.Background(), req)
+	if decision.normalizedAction() != HookActionContinue {
+		t.Fatalf("decision = %v, want continue", decision)
+	}
+	if got.Model != "changed-model" {
+		t.Fatalf("model = %q, want changed-model", got.Model)
+	}
+	if got.Messages[0].Content != "original system" {
+		t.Fatalf("system content = %q, want original system", got.Messages[0].Content)
+	}
+	if got.Messages[1].Content != "hello" {
+		t.Fatalf("user content = %q, want hello", got.Messages[1].Content)
+	}
+}
+
+func TestHookManager_BeforeLLMAllowsNonSystemMessageMutation(t *testing.T) {
+	hm := NewHookManager(nil)
+	if err := hm.Mount(NamedHook("append-user", &llmUserAppendHook{})); err != nil {
+		t.Fatalf("Mount() error = %v", err)
+	}
+
+	req := &LLMHookRequest{
+		Model: "model",
+		Messages: []providers.Message{
+			{Role: "system", Content: "system"},
+			{Role: "user", Content: "hello"},
+		},
+	}
+
+	got, _ := hm.BeforeLLM(context.Background(), req)
+	if len(got.Messages) != 3 {
+		t.Fatalf("messages len = %d, want 3", len(got.Messages))
+	}
+	if got.Messages[2].Role != "user" || got.Messages[2].Content != "extra user context" {
+		t.Fatalf("appended message = %#v, want extra user context", got.Messages[2])
+	}
+}
+
 func TestAgentLoop_Hooks_ObserverAndLLMInterceptor(t *testing.T) {
 	provider := &llmHookTestProvider{}
 	al, agent, cleanup := newHookTestLoop(t, provider)

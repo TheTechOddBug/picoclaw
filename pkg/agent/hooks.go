@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 	"sync"
 	"time"
@@ -325,6 +326,7 @@ func (hm *HookManager) BeforeLLM(ctx context.Context, req *LLMHookRequest) (*LLM
 		switch decision.normalizedAction() {
 		case HookActionContinue, HookActionModify:
 			if next != nil {
+				next = hm.applyBeforeLLMControls(reg.Name, current, next)
 				current = next
 			}
 		case HookActionAbortTurn, HookActionHardAbort:
@@ -365,6 +367,50 @@ func (hm *HookManager) AfterLLM(ctx context.Context, resp *LLMHookResponse) (*LL
 		}
 	}
 	return current, HookDecision{Action: HookActionContinue}
+}
+
+func (hm *HookManager) applyBeforeLLMControls(
+	hookName string,
+	current *LLMHookRequest,
+	next *LLMHookRequest,
+) *LLMHookRequest {
+	if next == nil || current == nil {
+		return next
+	}
+	if llmHookSystemMessagesUnchanged(current.Messages, next.Messages) {
+		return next
+	}
+
+	logger.WarnCF("hooks", "Hook attempted to modify system prompt; preserving original messages", map[string]any{
+		"hook": hookName,
+	})
+	next.Messages = cloneProviderMessages(current.Messages)
+	return next
+}
+
+func llmHookSystemMessagesUnchanged(before, after []providers.Message) bool {
+	beforeSystem := systemMessageFingerprints(before)
+	afterSystem := systemMessageFingerprints(after)
+	return reflect.DeepEqual(beforeSystem, afterSystem)
+}
+
+type systemMessageFingerprint struct {
+	Index   int
+	Message providers.Message
+}
+
+func systemMessageFingerprints(messages []providers.Message) []systemMessageFingerprint {
+	var fingerprints []systemMessageFingerprint
+	for i, msg := range messages {
+		if msg.Role != "system" {
+			continue
+		}
+		fingerprints = append(fingerprints, systemMessageFingerprint{
+			Index:   i,
+			Message: cloneProviderMessages([]providers.Message{msg})[0],
+		})
+	}
+	return fingerprints
 }
 
 func (hm *HookManager) BeforeTool(
