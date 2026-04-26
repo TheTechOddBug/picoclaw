@@ -5,6 +5,7 @@ package agent
 import (
 	"fmt"
 
+	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
 	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
@@ -39,13 +40,16 @@ func (al *AgentLoop) emitEvent(kind EventKind, meta EventMeta, payload any) {
 		Payload: payload,
 	}
 
-	if al == nil || al.eventBus == nil {
+	if al == nil {
 		return
 	}
 
 	al.logEvent(evt)
 
-	al.eventBus.Emit(evt)
+	if al.eventBus != nil {
+		al.eventBus.Emit(evt)
+	}
+	al.publishRuntimeEvent(evt)
 }
 
 func (al *AgentLoop) logEvent(evt Event) {
@@ -185,4 +189,20 @@ func (al *AgentLoop) EventDrops(kind EventKind) int64 {
 		return 0
 	}
 	return al.eventBus.Dropped(kind)
+}
+
+// RuntimeEvents returns the root runtime event channel.
+func (al *AgentLoop) RuntimeEvents() runtimeevents.EventChannel {
+	if al == nil || al.runtimeEvents == nil {
+		return nil
+	}
+	return al.runtimeEvents.Channel()
+}
+
+// RuntimeEventStats returns runtime event bus counters.
+func (al *AgentLoop) RuntimeEventStats() runtimeevents.Stats {
+	if al == nil || al.runtimeEvents == nil {
+		return runtimeevents.Stats{Closed: true}
+	}
+	return al.runtimeEvents.Stats()
 }

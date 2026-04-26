@@ -13,6 +13,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/channels"
 	"github.com/sipeed/picoclaw/pkg/commands"
 	"github.com/sipeed/picoclaw/pkg/config"
+	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/skills"
@@ -24,6 +25,7 @@ func NewAgentLoop(
 	cfg *config.Config,
 	msgBus *bus.MessageBus,
 	provider providers.LLMProvider,
+	opts ...AgentLoopOption,
 ) *AgentLoop {
 	registry := NewAgentRegistry(cfg, provider)
 
@@ -56,15 +58,25 @@ func NewAgentLoop(
 	}
 
 	al := &AgentLoop{
-		bus:         msgBus,
-		cfg:         cfg,
-		registry:    registry,
-		state:       stateManager,
-		eventBus:    eventBus,
-		fallback:    fallbackChain,
-		cmdRegistry: commands.NewRegistry(commands.BuiltinDefinitions()),
-		steering:    newSteeringQueue(parseSteeringMode(cfg.Agents.Defaults.SteeringMode)),
-		workerSem:   make(chan struct{}, workerPoolSize),
+		bus:               msgBus,
+		cfg:               cfg,
+		registry:          registry,
+		state:             stateManager,
+		eventBus:          eventBus,
+		fallback:          fallbackChain,
+		cmdRegistry:       commands.NewRegistry(commands.BuiltinDefinitions()),
+		steering:          newSteeringQueue(parseSteeringMode(cfg.Agents.Defaults.SteeringMode)),
+		workerSem:         make(chan struct{}, workerPoolSize),
+		ownsRuntimeEvents: true,
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(al)
+		}
+	}
+	if al.runtimeEvents == nil {
+		al.runtimeEvents = runtimeevents.NewBus()
+		al.ownsRuntimeEvents = true
 	}
 	al.providerFactory = providers.CreateProviderFromConfig
 	al.hooks = NewHookManager(eventBus)

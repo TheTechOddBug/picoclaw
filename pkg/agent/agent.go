@@ -21,6 +21,7 @@ import (
 	"github.com/sipeed/picoclaw/pkg/commands"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/constants"
+	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/media"
 	"github.com/sipeed/picoclaw/pkg/providers"
@@ -38,8 +39,10 @@ type AgentLoop struct {
 	state    *state.Manager
 
 	// Event system (from Incoming)
-	eventBus *EventBus
-	hooks    *HookManager
+	eventBus          *EventBus
+	runtimeEvents     runtimeevents.Bus
+	ownsRuntimeEvents bool
+	hooks             *HookManager
 
 	// Runtime state
 	running        atomic.Bool
@@ -285,6 +288,14 @@ func (al *AgentLoop) Close() {
 	}
 	if al.eventBus != nil {
 		al.eventBus.Close()
+	}
+	if al.runtimeEvents != nil && al.ownsRuntimeEvents {
+		if err := al.runtimeEvents.Close(); err != nil {
+			logger.ErrorCF("agent", "Failed to close runtime event bus",
+				map[string]any{
+					"error": err.Error(),
+				})
+		}
 	}
 }
 

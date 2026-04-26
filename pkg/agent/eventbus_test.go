@@ -9,6 +9,7 @@ import (
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
+	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/routing"
 	"github.com/sipeed/picoclaw/pkg/session"
@@ -64,6 +65,100 @@ func TestEventBus_DropsWhenSubscriberIsFull(t *testing.T) {
 
 	if got := eventBus.Dropped(EventKindLLMRequest); got != 999 {
 		t.Fatalf("expected 999 dropped events, got %d", got)
+	}
+}
+
+func TestAgentLoop_DualPublishesRuntimeEvents(t *testing.T) {
+	runtimeBus := runtimeevents.NewBus()
+	al := &AgentLoop{
+		eventBus:      NewEventBus(),
+		runtimeEvents: runtimeBus,
+	}
+	defer al.eventBus.Close()
+	defer func() {
+		if err := runtimeBus.Close(); err != nil {
+			t.Errorf("runtime bus close failed: %v", err)
+		}
+	}()
+
+	legacySub := al.SubscribeEvents(1)
+	defer al.UnsubscribeEvents(legacySub.ID)
+
+	runtimeSub, runtimeCh, err := al.RuntimeEvents().OfKind(runtimeevents.KindAgentToolExecStart).SubscribeChan(
+		context.Background(),
+		runtimeevents.SubscribeOptions{Name: "runtime", Buffer: 1},
+	)
+	if err != nil {
+		t.Fatalf("SubscribeChan failed: %v", err)
+	}
+	defer func() {
+		if err := runtimeSub.Close(); err != nil {
+			t.Errorf("runtime subscription close failed: %v", err)
+		}
+	}()
+
+	al.emitEvent(
+		EventKindToolExecStart,
+		EventMeta{
+			AgentID:      "main",
+			TurnID:       "turn-1",
+			ParentTurnID: "parent-turn",
+			SessionKey:   "session-1",
+			Iteration:    2,
+			TracePath:    "trace/root",
+			Source:       "pipeline_execute",
+			turnContext: &TurnContext{
+				Inbound: &bus.InboundContext{
+					Channel:   "cli",
+					Account:   "default",
+					ChatID:    "direct",
+					ChatType:  "direct",
+					SenderID:  "tester",
+					MessageID: "msg-1",
+					TopicID:   "topic-1",
+				},
+			},
+		},
+		ToolExecStartPayload{Tool: "mock_custom", Arguments: map[string]any{"task": "ping"}},
+	)
+
+	legacyEvt := receiveLegacyEvent(t, legacySub.C)
+	if legacyEvt.Kind != EventKindToolExecStart {
+		t.Fatalf("legacy kind = %v, want %v", legacyEvt.Kind, EventKindToolExecStart)
+	}
+
+	runtimeEvt := receiveRuntimeEvent(t, runtimeCh)
+	if runtimeEvt.Kind != runtimeevents.KindAgentToolExecStart {
+		t.Fatalf("runtime kind = %q, want %q", runtimeEvt.Kind, runtimeevents.KindAgentToolExecStart)
+	}
+	if runtimeEvt.Source != (runtimeevents.Source{Component: "agent", Name: "main"}) {
+		t.Fatalf("runtime source = %+v", runtimeEvt.Source)
+	}
+	if runtimeEvt.Scope.AgentID != "main" ||
+		runtimeEvt.Scope.SessionKey != "session-1" ||
+		runtimeEvt.Scope.TurnID != "turn-1" ||
+		runtimeEvt.Scope.Channel != "cli" ||
+		runtimeEvt.Scope.Account != "default" ||
+		runtimeEvt.Scope.ChatID != "direct" ||
+		runtimeEvt.Scope.TopicID != "topic-1" ||
+		runtimeEvt.Scope.ChatType != "direct" ||
+		runtimeEvt.Scope.SenderID != "tester" ||
+		runtimeEvt.Scope.MessageID != "msg-1" {
+		t.Fatalf("runtime scope = %+v", runtimeEvt.Scope)
+	}
+	if runtimeEvt.Correlation.TraceID != "trace/root" ||
+		runtimeEvt.Correlation.ParentTurnID != "parent-turn" {
+		t.Fatalf("runtime correlation = %+v", runtimeEvt.Correlation)
+	}
+	if runtimeEvt.Attrs["agent_source"] != "pipeline_execute" || runtimeEvt.Attrs["iteration"] != 2 {
+		t.Fatalf("runtime attrs = %+v", runtimeEvt.Attrs)
+	}
+	payload, ok := runtimeEvt.Payload.(ToolExecStartPayload)
+	if !ok {
+		t.Fatalf("runtime payload = %T, want ToolExecStartPayload", runtimeEvt.Payload)
+	}
+	if payload.Tool != "mock_custom" {
+		t.Fatalf("runtime payload tool = %q, want mock_custom", payload.Tool)
 	}
 }
 
@@ -633,6 +728,36 @@ func collectEventStream(ch <-chan Event) []Event {
 		default:
 			return events
 		}
+	}
+}
+
+func receiveLegacyEvent(t *testing.T, ch <-chan Event) Event {
+	t.Helper()
+
+	select {
+	case evt, ok := <-ch:
+		if !ok {
+			t.Fatal("legacy event stream closed before expected event arrived")
+		}
+		return evt
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for legacy event")
+		return Event{}
+	}
+}
+
+func receiveRuntimeEvent(t *testing.T, ch <-chan runtimeevents.Event) runtimeevents.Event {
+	t.Helper()
+
+	select {
+	case evt, ok := <-ch:
+		if !ok {
+			t.Fatal("runtime event stream closed before expected event arrived")
+		}
+		return evt
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for runtime event")
+		return runtimeevents.Event{}
 	}
 }
 
