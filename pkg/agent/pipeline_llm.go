@@ -12,6 +12,7 @@ import (
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/constants"
+	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
@@ -114,7 +115,7 @@ func (p *Pipeline) CallLLM(
 	}
 
 	al.emitEvent(
-		EventKindLLMRequest,
+		runtimeevents.KindAgentLLMRequest,
 		ts.eventMeta("runTurn", "turn.llm.request"),
 		LLMRequestPayload{
 			Model:         exec.llmModel,
@@ -200,7 +201,7 @@ func (p *Pipeline) CallLLM(
 		// Retry without media if vision is unsupported
 		if hasMediaRefs(exec.callMessages) && isVisionUnsupportedError(err) && retry < maxRetries {
 			al.emitEvent(
-				EventKindLLMRetry,
+				runtimeevents.KindAgentLLMRetry,
 				ts.eventMeta("runTurn", "turn.llm.retry"),
 				LLMRetryPayload{
 					Attempt:    retry + 1,
@@ -247,7 +248,7 @@ func (p *Pipeline) CallLLM(
 		if isTimeoutError && retry < maxRetries {
 			backoff := time.Duration(retry+1) * 5 * time.Second
 			al.emitEvent(
-				EventKindLLMRetry,
+				runtimeevents.KindAgentLLMRetry,
 				ts.eventMeta("runTurn", "turn.llm.retry"),
 				LLMRetryPayload{
 					Attempt:    retry + 1,
@@ -275,7 +276,7 @@ func (p *Pipeline) CallLLM(
 
 		if isContextError && retry < maxRetries && !ts.opts.NoHistory {
 			al.emitEvent(
-				EventKindLLMRetry,
+				runtimeevents.KindAgentLLMRetry,
 				ts.eventMeta("runTurn", "turn.llm.retry"),
 				LLMRetryPayload{
 					Attempt:    retry + 1,
@@ -334,7 +335,7 @@ func (p *Pipeline) CallLLM(
 
 	if err != nil {
 		al.emitEvent(
-			EventKindError,
+			runtimeevents.KindAgentError,
 			ts.eventMeta("runTurn", "turn.error"),
 			ErrorPayload{
 				Stage:   "llm",
@@ -394,7 +395,7 @@ func (p *Pipeline) CallLLM(
 		)
 	}
 	al.emitEvent(
-		EventKindLLMResponse,
+		runtimeevents.KindAgentLLMResponse,
 		ts.eventMeta("runTurn", "turn.llm.response"),
 		LLMResponsePayload{
 			ContentLen:   len(exec.response.Content),

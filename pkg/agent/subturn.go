@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 	"github.com/sipeed/picoclaw/pkg/providers/messageutil"
@@ -422,7 +423,7 @@ func spawnSubTurn(
 	parentTS.mu.Unlock()
 
 	// 6. Emit Spawn event
-	al.emitEvent(EventKindSubTurnSpawn,
+	al.emitEvent(runtimeevents.KindAgentSubTurnSpawn,
 		childTS.eventMeta("spawnSubTurn", "subturn.spawn"),
 		SubTurnSpawnPayload{
 			AgentID:      childTS.agentID,
@@ -453,7 +454,7 @@ func spawnSubTurn(
 		if err != nil {
 			status = "error"
 		}
-		al.emitEvent(EventKindSubTurnEnd,
+		al.emitEvent(runtimeevents.KindAgentSubTurnEnd,
 			childTS.eventMeta("spawnSubTurn", "subturn.end"),
 			SubTurnEndPayload{
 				AgentID: childTS.agentID,
@@ -526,7 +527,7 @@ func deliverSubTurnResult(al *AgentLoop, parentTS *turnState, childID string, re
 				"recover":   r,
 			})
 			if result != nil && al != nil {
-				al.emitEvent(EventKindSubTurnOrphan,
+				al.emitEvent(runtimeevents.KindAgentSubTurnOrphan,
 					parentTS.eventMeta("deliverSubTurnResult", "subturn.orphan"),
 					SubTurnOrphanPayload{ParentTurnID: parentTS.turnID, ChildTurnID: childID, Reason: "panic"},
 				)
@@ -541,7 +542,7 @@ func deliverSubTurnResult(al *AgentLoop, parentTS *turnState, childID string, re
 	// If parent turn has already finished, treat this as an orphan result
 	if isFinished || resultChan == nil {
 		if result != nil && al != nil {
-			al.emitEvent(EventKindSubTurnOrphan,
+			al.emitEvent(runtimeevents.KindAgentSubTurnOrphan,
 				parentTS.eventMeta("deliverSubTurnResult", "subturn.orphan"),
 				SubTurnOrphanPayload{ParentTurnID: parentTS.turnID, ChildTurnID: childID, Reason: "parent_finished"},
 			)
@@ -557,7 +558,7 @@ func deliverSubTurnResult(al *AgentLoop, parentTS *turnState, childID string, re
 	case resultChan <- result:
 		// Successfully delivered
 		if al != nil {
-			al.emitEvent(EventKindSubTurnResultDelivered,
+			al.emitEvent(runtimeevents.KindAgentSubTurnResultDelivered,
 				parentTS.eventMeta("deliverSubTurnResult", "subturn.result_delivered"),
 				SubTurnResultDeliveredPayload{ContentLen: len(result.ForLLM)},
 			)
@@ -571,7 +572,7 @@ func deliverSubTurnResult(al *AgentLoop, parentTS *turnState, childID string, re
 		})
 		if result != nil && al != nil {
 			al.emitEvent(
-				EventKindSubTurnOrphan,
+				runtimeevents.KindAgentSubTurnOrphan,
 				parentTS.eventMeta("deliverSubTurnResult", "subturn.orphan"),
 				SubTurnOrphanPayload{
 					ParentTurnID: parentTS.turnID,

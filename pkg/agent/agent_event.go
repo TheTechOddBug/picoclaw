@@ -19,8 +19,8 @@ func (al *AgentLoop) newTurnEventScope(agentID, sessionKey string, turnCtx *Turn
 	}
 }
 
-func (ts turnEventScope) meta(iteration int, source, tracePath string) EventMeta {
-	return EventMeta{
+func (ts turnEventScope) meta(iteration int, source, tracePath string) HookMeta {
+	return HookMeta{
 		AgentID:     ts.agentID,
 		TurnID:      ts.turnID,
 		SessionKey:  ts.sessionKey,
@@ -31,41 +31,45 @@ func (ts turnEventScope) meta(iteration int, source, tracePath string) EventMeta
 	}
 }
 
-func (al *AgentLoop) emitEvent(kind EventKind, meta EventMeta, payload any) {
-	clonedMeta := cloneEventMeta(meta)
-	evt := Event{
-		Kind:    kind,
-		Meta:    clonedMeta,
-		Context: cloneTurnContext(clonedMeta.turnContext),
-		Payload: payload,
+func (al *AgentLoop) emitEvent(kind runtimeevents.Kind, meta HookMeta, payload any) {
+	clonedMeta := cloneHookMeta(meta)
+	eventCtx := cloneTurnContext(clonedMeta.turnContext)
+	evt := runtimeevents.Event{
+		Kind:        kind,
+		Source:      runtimeevents.Source{Component: "agent", Name: clonedMeta.AgentID},
+		Scope:       runtimeScopeFromHookMeta(clonedMeta, eventCtx),
+		Correlation: runtimeCorrelationFromHookMeta(clonedMeta),
+		Severity:    runtimeSeverityForAgentEvent(kind, payload),
+		Payload:     payload,
+		Attrs:       runtimeAttrsFromHookMeta(clonedMeta),
 	}
 
 	if al == nil {
 		return
 	}
 
-	al.logEvent(evt)
+	al.logEvent(evt, clonedMeta, eventCtx)
 
 	al.publishRuntimeEvent(evt)
 }
 
-func (al *AgentLoop) logEvent(evt Event) {
+func (al *AgentLoop) logEvent(evt runtimeevents.Event, meta HookMeta, eventCtx *TurnContext) {
 	fields := map[string]any{
 		"event_kind":  evt.Kind.String(),
-		"agent_id":    evt.Meta.AgentID,
-		"turn_id":     evt.Meta.TurnID,
-		"session_key": evt.Meta.SessionKey,
-		"iteration":   evt.Meta.Iteration,
+		"agent_id":    meta.AgentID,
+		"turn_id":     meta.TurnID,
+		"session_key": meta.SessionKey,
+		"iteration":   meta.Iteration,
 	}
 
-	if evt.Meta.TracePath != "" {
-		fields["trace"] = evt.Meta.TracePath
+	if meta.TracePath != "" {
+		fields["trace"] = meta.TracePath
 	}
-	if evt.Meta.Source != "" {
-		fields["source"] = evt.Meta.Source
+	if meta.Source != "" {
+		fields["source"] = meta.Source
 	}
 
-	appendEventContextFields(fields, evt.Context)
+	appendEventContextFields(fields, eventCtx)
 
 	switch payload := evt.Payload.(type) {
 	case TurnStartPayload:

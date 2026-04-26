@@ -91,7 +91,7 @@ type ToolApprover interface {
 }
 
 type LLMHookRequest struct {
-	Meta             EventMeta                  `json:"meta"`
+	Meta             HookMeta                   `json:"meta"`
 	Context          *TurnContext               `json:"context,omitempty"`
 	Model            string                     `json:"model"`
 	Messages         []providers.Message        `json:"messages,omitempty"`
@@ -105,7 +105,7 @@ func (r *LLMHookRequest) Clone() *LLMHookRequest {
 		return nil
 	}
 	cloned := *r
-	cloned.Meta = cloneEventMeta(r.Meta)
+	cloned.Meta = cloneHookMeta(r.Meta)
 	cloned.Context = cloneTurnContext(r.Context)
 	cloned.Messages = cloneProviderMessages(r.Messages)
 	cloned.Tools = cloneToolDefinitions(r.Tools)
@@ -114,7 +114,7 @@ func (r *LLMHookRequest) Clone() *LLMHookRequest {
 }
 
 type LLMHookResponse struct {
-	Meta     EventMeta              `json:"meta"`
+	Meta     HookMeta               `json:"meta"`
 	Context  *TurnContext           `json:"context,omitempty"`
 	Model    string                 `json:"model"`
 	Response *providers.LLMResponse `json:"response,omitempty"`
@@ -125,14 +125,14 @@ func (r *LLMHookResponse) Clone() *LLMHookResponse {
 		return nil
 	}
 	cloned := *r
-	cloned.Meta = cloneEventMeta(r.Meta)
+	cloned.Meta = cloneHookMeta(r.Meta)
 	cloned.Context = cloneTurnContext(r.Context)
 	cloned.Response = cloneLLMResponse(r.Response)
 	return &cloned
 }
 
 type ToolCallHookRequest struct {
-	Meta       EventMeta         `json:"meta"`
+	Meta       HookMeta          `json:"meta"`
 	Context    *TurnContext      `json:"context,omitempty"`
 	Tool       string            `json:"tool"`
 	Arguments  map[string]any    `json:"arguments,omitempty"`
@@ -146,7 +146,7 @@ func (r *ToolCallHookRequest) Clone() *ToolCallHookRequest {
 		return nil
 	}
 	cloned := *r
-	cloned.Meta = cloneEventMeta(r.Meta)
+	cloned.Meta = cloneHookMeta(r.Meta)
 	cloned.Context = cloneTurnContext(r.Context)
 	cloned.Arguments = cloneStringAnyMap(r.Arguments)
 	cloned.HookResult = cloneToolResult(r.HookResult)
@@ -154,7 +154,7 @@ func (r *ToolCallHookRequest) Clone() *ToolCallHookRequest {
 }
 
 type ToolApprovalRequest struct {
-	Meta      EventMeta      `json:"meta"`
+	Meta      HookMeta       `json:"meta"`
 	Context   *TurnContext   `json:"context,omitempty"`
 	Tool      string         `json:"tool"`
 	Arguments map[string]any `json:"arguments,omitempty"`
@@ -165,14 +165,14 @@ func (r *ToolApprovalRequest) Clone() *ToolApprovalRequest {
 		return nil
 	}
 	cloned := *r
-	cloned.Meta = cloneEventMeta(r.Meta)
+	cloned.Meta = cloneHookMeta(r.Meta)
 	cloned.Context = cloneTurnContext(r.Context)
 	cloned.Arguments = cloneStringAnyMap(r.Arguments)
 	return &cloned
 }
 
 type ToolResultHookResponse struct {
-	Meta      EventMeta         `json:"meta"`
+	Meta      HookMeta          `json:"meta"`
 	Context   *TurnContext      `json:"context,omitempty"`
 	Tool      string            `json:"tool"`
 	Arguments map[string]any    `json:"arguments,omitempty"`
@@ -185,7 +185,7 @@ func (r *ToolResultHookResponse) Clone() *ToolResultHookResponse {
 		return nil
 	}
 	cloned := *r
-	cloned.Meta = cloneEventMeta(r.Meta)
+	cloned.Meta = cloneHookMeta(r.Meta)
 	cloned.Context = cloneTurnContext(r.Context)
 	cloned.Arguments = cloneStringAnyMap(r.Arguments)
 	cloned.Result = cloneToolResult(r.Result)

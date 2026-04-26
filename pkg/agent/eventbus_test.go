@@ -41,8 +41,8 @@ func TestAgentLoop_PublishesRuntimeEvents(t *testing.T) {
 	}()
 
 	al.emitEvent(
-		EventKindToolExecStart,
-		EventMeta{
+		runtimeevents.KindAgentToolExecStart,
+		HookMeta{
 			AgentID:      "main",
 			TurnID:       "turn-1",
 			ParentTurnID: "parent-turn",

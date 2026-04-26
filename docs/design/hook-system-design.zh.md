@@ -2,7 +2,7 @@
 
 > 当前状态：本文是 hook 系统的早期设计记录。事件系统升级后，观察型 hook 的主路径已经切到
 > `pkg/events.Event`、`RuntimeEventObserver` 和进程 hook 的 `hook.runtime_event`。
-> 文中提到的 `agent.Event`、`EventKind`、`hook.event` 只代表迁移期兼容层，不应作为新代码接口。
+> 旧 `agent.Event`、`EventKind`、`hook.event` 兼容层已经删除。
 
 ## 背景
 
@@ -58,19 +58,16 @@ pi-mono 的核心思路更接近当前分支：
 
 - `pkg/events` 定义 runtime event envelope、kind、scope、source、severity 和 fan-out bus
 - `pkg/agent/event_payloads.go` 保留 agent domain payload
-- `pkg/agent/eventbus.go` 只作为迁移期兼容层存在
+- agent domain payload 保留在 `pkg/agent/event_payloads.go`
 - `pkg/agent/loop.go` 中的 `runTurn()` 已在 turn、llm、tool、interrupt、follow-up、summary 等节点发射事件
 - `pkg/agent/steering.go` 已支持 steering、graceful interrupt、hard abort
 - `pkg/agent/turn.go` 已维护 turn phase、恢复点、active turn、abort 状态
 
 ### 现有缺口
 
-当前分支还缺四件事：
-
-- 没有 HookManager，只有旧 agent EventBus
-- 没有 Before/After LLM、Before/After Tool 这种同步拦截点
-- 没有审批型 hook
-- 子 agent 仍走 `pkg/tools/SubagentManager + RunToolLoop`，没有接入 `pkg/agent` 的 turn tree 和事件流
+早期设计时的缺口包括 HookManager、Before/After LLM、Before/After Tool、审批型 hook
+以及 sub-turn 接入。当前实现已经覆盖主 turn 的 HookManager、LLM/Tool 拦截和审批；
+sub-turn 事件已接入 runtime event bus。
 
 ### 一个关键现实
 
@@ -122,7 +119,7 @@ type EventObserver interface {
 }
 ```
 
-这类 hook 直接订阅 runtime event bus 即可。旧 `OnEvent(ctx, agent.Event)` 仅用于迁移期兼容。
+这类 hook 直接订阅 runtime event bus 即可。
 
 适用场景：
 

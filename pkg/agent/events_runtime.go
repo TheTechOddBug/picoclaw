@@ -9,7 +9,7 @@ import (
 
 const runtimeEventPublishTimeout = 100 * time.Millisecond
 
-func (al *AgentLoop) publishRuntimeEvent(evt Event) {
+func (al *AgentLoop) publishRuntimeEvent(evt runtimeevents.Event) {
 	if al == nil || al.runtimeEvents == nil {
 		return
 	}
@@ -17,29 +17,21 @@ func (al *AgentLoop) publishRuntimeEvent(evt Event) {
 	ctx, cancel := context.WithTimeout(context.Background(), runtimeEventPublishTimeout)
 	defer cancel()
 
-	al.runtimeEvents.Publish(ctx, runtimeevents.Event{
-		Kind:        runtimeKindForAgentEvent(evt.Kind),
-		Source:      runtimeevents.Source{Component: "agent", Name: evt.Meta.AgentID},
-		Scope:       runtimeScopeFromAgentEvent(evt),
-		Correlation: runtimeCorrelationFromAgentEvent(evt),
-		Severity:    runtimeSeverityForAgentEvent(evt),
-		Payload:     evt.Payload,
-		Attrs:       runtimeAttrsFromAgentEvent(evt),
-	})
+	al.runtimeEvents.Publish(ctx, evt)
 }
 
-func runtimeScopeFromAgentEvent(evt Event) runtimeevents.Scope {
+func runtimeScopeFromHookMeta(meta HookMeta, eventCtx *TurnContext) runtimeevents.Scope {
 	scope := runtimeevents.Scope{
-		AgentID:    evt.Meta.AgentID,
-		SessionKey: evt.Meta.SessionKey,
-		TurnID:     evt.Meta.TurnID,
+		AgentID:    meta.AgentID,
+		SessionKey: meta.SessionKey,
+		TurnID:     meta.TurnID,
 	}
 
-	if evt.Context == nil || evt.Context.Inbound == nil {
+	if eventCtx == nil || eventCtx.Inbound == nil {
 		return scope
 	}
 
-	inbound := evt.Context.Inbound
+	inbound := eventCtx.Inbound
 	scope.Channel = inbound.Channel
 	scope.Account = inbound.Account
 	scope.ChatID = inbound.ChatID
@@ -52,21 +44,23 @@ func runtimeScopeFromAgentEvent(evt Event) runtimeevents.Scope {
 	return scope
 }
 
-func runtimeCorrelationFromAgentEvent(evt Event) runtimeevents.Correlation {
+func runtimeCorrelationFromHookMeta(meta HookMeta) runtimeevents.Correlation {
 	return runtimeevents.Correlation{
-		TraceID:      evt.Meta.TracePath,
-		ParentTurnID: evt.Meta.ParentTurnID,
+		TraceID:      meta.TracePath,
+		ParentTurnID: meta.ParentTurnID,
 	}
 }
 
-func runtimeSeverityForAgentEvent(evt Event) runtimeevents.Severity {
-	switch evt.Kind {
-	case EventKindError, EventKindSubTurnOrphan:
+func runtimeSeverityForAgentEvent(kind runtimeevents.Kind, payload any) runtimeevents.Severity {
+	switch kind {
+	case runtimeevents.KindAgentError, runtimeevents.KindAgentSubTurnOrphan:
 		return runtimeevents.SeverityError
-	case EventKindLLMRetry, EventKindContextCompress, EventKindToolExecSkipped:
+	case runtimeevents.KindAgentLLMRetry,
+		runtimeevents.KindAgentContextCompress,
+		runtimeevents.KindAgentToolExecSkipped:
 		return runtimeevents.SeverityWarn
-	case EventKindTurnEnd:
-		payload, ok := evt.Payload.(TurnEndPayload)
+	case runtimeevents.KindAgentTurnEnd:
+		payload, ok := payload.(TurnEndPayload)
 		if !ok {
 			return runtimeevents.SeverityInfo
 		}
@@ -78,8 +72,8 @@ func runtimeSeverityForAgentEvent(evt Event) runtimeevents.Severity {
 		default:
 			return runtimeevents.SeverityInfo
 		}
-	case EventKindToolExecEnd:
-		payload, ok := evt.Payload.(ToolExecEndPayload)
+	case runtimeevents.KindAgentToolExecEnd:
+		payload, ok := payload.(ToolExecEndPayload)
 		if ok && payload.IsError {
 			return runtimeevents.SeverityWarn
 		}
@@ -89,13 +83,13 @@ func runtimeSeverityForAgentEvent(evt Event) runtimeevents.Severity {
 	}
 }
 
-func runtimeAttrsFromAgentEvent(evt Event) map[string]any {
+func runtimeAttrsFromHookMeta(meta HookMeta) map[string]any {
 	attrs := make(map[string]any, 2)
-	if evt.Meta.Source != "" {
-		attrs["agent_source"] = evt.Meta.Source
+	if meta.Source != "" {
+		attrs["agent_source"] = meta.Source
 	}
-	if evt.Meta.Iteration != 0 {
-		attrs["iteration"] = evt.Meta.Iteration
+	if meta.Iteration != 0 {
+		attrs["iteration"] = meta.Iteration
 	}
 	if len(attrs) == 0 {
 		return nil

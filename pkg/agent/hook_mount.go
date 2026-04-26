@@ -311,14 +311,49 @@ func processHookObserveKindsFromConfig(observe []string) ([]string, bool, error)
 }
 
 func validHookEventKinds() map[string]string {
-	kinds := make(map[string]string, int(eventKindCount)*2)
-	for kind := EventKind(0); kind < eventKindCount; kind++ {
-		runtimeKind := runtimeKindForAgentEvent(kind).String()
-		kinds[kind.String()] = runtimeKind
-		kinds[runtimeKind] = runtimeKind
+	runtimeKinds := []runtimeevents.Kind{
+		runtimeevents.KindAgentTurnStart,
+		runtimeevents.KindAgentTurnEnd,
+		runtimeevents.KindAgentLLMRequest,
+		runtimeevents.KindAgentLLMDelta,
+		runtimeevents.KindAgentLLMResponse,
+		runtimeevents.KindAgentLLMRetry,
+		runtimeevents.KindAgentContextCompress,
+		runtimeevents.KindAgentSessionSummarize,
+		runtimeevents.KindAgentToolExecStart,
+		runtimeevents.KindAgentToolExecEnd,
+		runtimeevents.KindAgentToolExecSkipped,
+		runtimeevents.KindAgentSteeringInjected,
+		runtimeevents.KindAgentFollowUpQueued,
+		runtimeevents.KindAgentInterruptReceived,
+		runtimeevents.KindAgentSubTurnSpawn,
+		runtimeevents.KindAgentSubTurnEnd,
+		runtimeevents.KindAgentSubTurnResultDelivered,
+		runtimeevents.KindAgentSubTurnOrphan,
+		runtimeevents.KindAgentError,
 	}
-	kinds[runtimeevents.KindAgentToolExecStart.String()] = runtimeevents.KindAgentToolExecStart.String()
-	kinds[runtimeevents.KindAgentToolExecEnd.String()] = runtimeevents.KindAgentToolExecEnd.String()
-	kinds[runtimeevents.KindAgentToolExecSkipped.String()] = runtimeevents.KindAgentToolExecSkipped.String()
+	kinds := make(map[string]string, len(runtimeKinds)*2)
+	for _, kind := range runtimeKinds {
+		kinds[kind.String()] = kind.String()
+	}
+	kinds["turn_start"] = runtimeevents.KindAgentTurnStart.String()
+	kinds["turn_end"] = runtimeevents.KindAgentTurnEnd.String()
+	kinds["llm_request"] = runtimeevents.KindAgentLLMRequest.String()
+	kinds["llm_delta"] = runtimeevents.KindAgentLLMDelta.String()
+	kinds["llm_response"] = runtimeevents.KindAgentLLMResponse.String()
+	kinds["llm_retry"] = runtimeevents.KindAgentLLMRetry.String()
+	kinds["context_compress"] = runtimeevents.KindAgentContextCompress.String()
+	kinds["session_summarize"] = runtimeevents.KindAgentSessionSummarize.String()
+	kinds["tool_exec_start"] = runtimeevents.KindAgentToolExecStart.String()
+	kinds["tool_exec_end"] = runtimeevents.KindAgentToolExecEnd.String()
+	kinds["tool_exec_skipped"] = runtimeevents.KindAgentToolExecSkipped.String()
+	kinds["steering_injected"] = runtimeevents.KindAgentSteeringInjected.String()
+	kinds["follow_up_queued"] = runtimeevents.KindAgentFollowUpQueued.String()
+	kinds["interrupt_received"] = runtimeevents.KindAgentInterruptReceived.String()
+	kinds["subturn_spawn"] = runtimeevents.KindAgentSubTurnSpawn.String()
+	kinds["subturn_end"] = runtimeevents.KindAgentSubTurnEnd.String()
+	kinds["subturn_result_delivered"] = runtimeevents.KindAgentSubTurnResultDelivered.String()
+	kinds["subturn_orphan"] = runtimeevents.KindAgentSubTurnOrphan.String()
+	kinds["error"] = runtimeevents.KindAgentError.String()
 	return kinds
 }

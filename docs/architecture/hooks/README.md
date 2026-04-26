@@ -13,7 +13,7 @@ The repository no longer ships standalone example source files. The Go and Pytho
 
 | Type | Interface | Stage | Can modify data |
 | --- | --- | --- | --- |
-| Observer | `RuntimeEventObserver` / `EventObserver` | Runtime event bus broadcast | No |
+| Observer | `RuntimeEventObserver` | Runtime event bus broadcast | No |
 | LLM interceptor | `LLMInterceptor` | `before_llm` / `after_llm` | Yes |
 | Tool interceptor | `ToolInterceptor` | `before_tool` / `after_tool` | Yes |
 | Tool approver | `ToolApprover` | `approve_tool` | No, returns allow/deny |

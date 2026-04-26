@@ -13,7 +13,7 @@
 
 | 类型 | 接口 | 作用阶段 | 能否改写 |
 | --- | --- | --- | --- |
-| 观察型 | `RuntimeEventObserver` / `EventObserver` | runtime event bus 广播事件时 | 否 |
+| 观察型 | `RuntimeEventObserver` | runtime event bus 广播事件时 | 否 |
 | LLM 拦截型 | `LLMInterceptor` | `before_llm` / `after_llm` | 是 |
 | Tool 拦截型 | `ToolInterceptor` | `before_tool` / `after_tool` | 是 |
 | Tool 审批型 | `ToolApprover` | `approve_tool` | 否，返回批准/拒绝 |
