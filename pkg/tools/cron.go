@@ -92,7 +92,7 @@ func (t *CronTool) Parameters() map[string]any {
 			"action": map[string]any{
 				"type":        "string",
 				"enum":        []string{"add", "list", "get", "update", "remove", "enable", "disable"},
-				"description": "Action to perform. Use 'get' before editing and 'update' to change existing jobs without losing their payload.",
+				"description": "Action to perform. Use 'get' before editing and 'update' to change existing jobs without losing their payload. Remote channels can only list/get/update jobs for the current channel/chat_id.",
 			},
 			"name": map[string]any{
 				"type":        "string",
@@ -142,7 +142,7 @@ func (t *CronTool) Execute(ctx context.Context, args map[string]any) *ToolResult
 	case "add":
 		return t.addJob(ctx, args)
 	case "list":
-		return t.listJobs()
+		return t.listJobs(ctx)
 	case "get":
 		return t.getJob(ctx, args)
 	case "update":
@@ -250,8 +250,16 @@ func (t *CronTool) addJob(ctx context.Context, args map[string]any) *ToolResult 
 	return SilentResult(fmt.Sprintf("Cron job added: %s (id: %s)", job.Name, job.ID))
 }
 
-func (t *CronTool) listJobs() *ToolResult {
+func (t *CronTool) listJobs(ctx context.Context) *ToolResult {
 	jobs := t.cronService.ListJobs(false)
+
+	var accessibleJobs []cron.CronJob
+	for _, job := range jobs {
+		if t.canAccessJob(ctx, &job) {
+			accessibleJobs = append(accessibleJobs, job)
+		}
+	}
+	jobs = accessibleJobs
 
 	if len(jobs) == 0 {
 		return SilentResult("No scheduled jobs")
@@ -286,6 +294,9 @@ func (t *CronTool) getJob(ctx context.Context, args map[string]any) *ToolResult 
 	if !ok {
 		return ErrorResult(fmt.Sprintf("Job %s not found", jobID))
 	}
+	if !t.canAccessJob(ctx, job) {
+		return ErrorResult(fmt.Sprintf("Job %s is not accessible from this channel", jobID))
+	}
 
 	return SilentResult(formatCronJobJSON(job))
 }
@@ -299,6 +310,9 @@ func (t *CronTool) updateJob(ctx context.Context, args map[string]any) *ToolResu
 	job, ok := t.cronService.GetJob(jobID)
 	if !ok {
 		return ErrorResult(fmt.Sprintf("Job %s not found", jobID))
+	}
+	if !t.canAccessJob(ctx, job) {
+		return ErrorResult(fmt.Sprintf("Job %s is not accessible from this channel", jobID))
 	}
 
 	patches := 0
@@ -474,6 +488,21 @@ func (t *CronTool) validateCommandMutation(ctx context.Context, args map[string]
 		return ErrorResult("command_confirm=true is required when allow_command is disabled")
 	}
 	return nil
+}
+
+func (t *CronTool) canAccessJob(ctx context.Context, job *cron.CronJob) bool {
+	channel := ToolChannel(ctx)
+	if constants.IsInternalChannel(channel) {
+		return true
+	}
+	chatID := ToolChatID(ctx)
+	if channel == "" || chatID == "" {
+		return false
+	}
+	if job.Payload.Command != "" {
+		return false
+	}
+	return job.Payload.Channel == channel && job.Payload.To == chatID
 }
 
 func formatCronJobJSON(job *cron.CronJob) string {

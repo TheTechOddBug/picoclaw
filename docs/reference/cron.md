@@ -31,14 +31,19 @@ picoclaw cron add --name "Ping" --message "heartbeat" --every 300 --deliver
 The agent-facing `cron` tool supports these actions:
 
 - `add`: create a new job.
-- `list`: show job names, ids, and schedules.
-- `get`: fetch one full persisted job by `job_id`, including its saved payload.
-- `update`: partially update one job by `job_id`; omitted fields are preserved.
+- `list`: show accessible job names, ids, and schedules.
+- `get`: fetch one accessible persisted job by `job_id`, including its saved payload.
+- `update`: partially update one accessible job by `job_id`; omitted fields are preserved.
 - `remove`, `enable`, `disable`: existing management actions.
 
 When rescheduling an existing task, use `list -> get -> update`. Do not use
 `remove -> add` just to change the schedule, because recreating a job can drop
 the original prompt, delivery target, or command payload.
+
+Remote channel access is scoped to the current `channel/chat_id`: remote callers
+can only list, get, or update jobs whose saved `payload.channel` and `payload.to`
+match the current conversation. Command jobs include a shell command payload, so
+they can only be listed, inspected, or updated from internal channels.
 
 Example tool calls:
 
